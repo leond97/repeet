@@ -839,19 +839,19 @@
   }
 
   /* ------------------------------------------------------------------
-     Application form → Kit
+     Application form → Formspree → leon@repeetagency.com
 
-     KIT_FORM_ID is the NUMERIC id of the "repeet applications" form in
-     Kit — not the uid from the embed URL. The endpoint answers
-     "Couldn't find a form for this request" if given the uid.
+     The payload keys are the labels that show up in the notification
+     email, so they are written for a human reading it on a phone.
 
-     Kit replies with HTTP 200 even when a submission fails, so the
-     response body has to be checked for status === "success". Anything
-     else falls back to the email link, so no application is lost
-     behind a "Got it." screen.
+     _replyto makes "Reply" in the mail client answer the applicant
+     directly; _subject puts the artist name in the subject line.
+
+     Any non-ok answer falls back to the mailto link, so an application
+     is never lost behind a "Got it." screen.
      ------------------------------------------------------------------ */
-  var KIT_FORM_ID   = 9887679;
-  var CONTACT_EMAIL = 'repeet.contact@gmail.com';
+  var FORM_ENDPOINT = 'https://formspree.io/f/mvkowgza';
+  var CONTACT_EMAIL = 'leon@repeetagency.com';
 
   var form    = document.getElementById('applyForm');
   var card    = document.getElementById('formCard');
@@ -883,7 +883,7 @@
       }
     }
 
-    if (!KIT_FORM_ID) {
+    if (!FORM_ENDPOINT) {
       showError('The form isn’t connected yet.');
       return;
     }
@@ -891,28 +891,29 @@
     button.disabled = true;
     button.textContent = 'Sending…';
 
-    fetch('https://app.kit.com/forms/' + KIT_FORM_ID + '/subscriptions', {
+    var artist = form.spotify.value.trim() || form.name.value.trim();
+
+    fetch(FORM_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
-        email_address: form.email.value.trim(),
-        first_name: form.name.value.trim(),
-        fields: {
-          artist_or_spotify: form.spotify.value.trim(),
-          genre: form.genre.value.trim(),
-          release_date: form.release.value.trim(),
-          monthly_listeners: form.listeners.value,
-          ad_budget: form.budget.value,
-          tried_so_far: form.tried.value.trim()
-        }
+        '_replyto': form.email.value.trim(),
+        '_subject': 'New application: ' + artist,
+        'Name': form.name.value.trim(),
+        'Email': form.email.value.trim(),
+        'Artist / Spotify': form.spotify.value.trim(),
+        'Genre': form.genre.value.trim() || '—',
+        'Next release': form.release.value.trim() || '—',
+        'Monthly listeners': form.listeners.value || '—',
+        'Ad budget': form.budget.value || '—',
+        'Tried so far': form.tried.value.trim() || '—'
       })
     })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        // Kit answers 200 on failure too — the body is the real result.
-        if (!data || data.status !== 'success') {
-          throw new Error('Kit rejected the submission');
-        }
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      })
+      .then(function (r) {
+        if (!r.ok) { throw new Error('Formspree rejected the submission'); }
         card.classList.add('is-sent');
       })
       .catch(function () {
